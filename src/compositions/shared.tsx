@@ -1,5 +1,7 @@
 import React from 'react';
 import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
+import { makeCircle, makeStar, makeTriangle, makeRect } from '@remotion/shapes';
+import { evolvePath, interpolatePath } from '@remotion/paths';
 import type { FontStyle } from '../types';
 
 // ─── Font helpers ────────────────────────────────────────────────
@@ -342,5 +344,384 @@ export const FloatingShapes: React.FC<{
         }}
       />
     </>
+  );
+};
+
+// ─── SVG Animated Circle (stroke draw-in) ────────────────────
+export const AnimatedCircle: React.FC<{
+  radius?: number;
+  color: string;
+  strokeWidth?: number;
+  x?: string;
+  y?: string;
+}> = ({ radius = 60, color, strokeWidth = 2, x = '50%', y = '50%' }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const progress = spring({ frame, fps, config: { damping: 14, stiffness: 60 } });
+  const { path } = makeCircle({ radius });
+  const evolved = evolvePath(progress, path);
+
+  return (
+    <svg
+      width={radius * 2 + strokeWidth * 2}
+      height={radius * 2 + strokeWidth * 2}
+      style={{ position: 'absolute', left: x, top: y, transform: 'translate(-50%, -50%)', pointerEvents: 'none' }}
+    >
+      <path
+        d={path}
+        fill="none"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeDasharray={evolved.strokeDasharray}
+        strokeDashoffset={evolved.strokeDashoffset}
+        transform={`translate(${strokeWidth}, ${strokeWidth})`}
+      />
+    </svg>
+  );
+};
+
+// ─── SVG Animated Triangle ───────────────────────────────────
+export const AnimatedTriangle: React.FC<{
+  size?: number;
+  color: string;
+  direction?: 'up' | 'down';
+  x?: string;
+  y?: string;
+}> = ({ size = 40, color, direction = 'up', x = '50%', y = '50%' }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const progress = spring({ frame, fps, config: { damping: 12, stiffness: 80 } });
+  const { path } = makeTriangle({ length: size, direction });
+  const evolved = evolvePath(progress, path);
+  const rotation = interpolate(frame, [0, 120], [0, 360], { extrapolateRight: 'extend' });
+
+  return (
+    <svg
+      width={size + 4}
+      height={size + 4}
+      style={{
+        position: 'absolute', left: x, top: y,
+        transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
+        pointerEvents: 'none', opacity: 0.5,
+      }}
+    >
+      <path
+        d={path}
+        fill="none"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeDasharray={evolved.strokeDasharray}
+        strokeDashoffset={evolved.strokeDashoffset}
+        transform="translate(2, 2)"
+      />
+    </svg>
+  );
+};
+
+// ─── SVG Animated Star ───────────────────────────────────────
+export const AnimatedStar: React.FC<{
+  size?: number;
+  color: string;
+  x?: string;
+  y?: string;
+}> = ({ size = 30, color, x = '50%', y = '50%' }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const progress = spring({ frame, fps, config: { damping: 10, stiffness: 60 } });
+  const { path } = makeStar({ innerRadius: size * 0.4, outerRadius: size, points: 5 });
+  const evolved = evolvePath(progress, path);
+  const rotation = frame * 0.5;
+  const scale = interpolate(progress, [0, 1], [0.5, 1]);
+
+  return (
+    <svg
+      width={size * 2 + 4}
+      height={size * 2 + 4}
+      style={{
+        position: 'absolute', left: x, top: y,
+        transform: `translate(-50%, -50%) rotate(${rotation}deg) scale(${scale})`,
+        pointerEvents: 'none',
+      }}
+    >
+      <path
+        d={path}
+        fill={`${color}15`}
+        stroke={color}
+        strokeWidth={1.5}
+        strokeDasharray={evolved.strokeDasharray}
+        strokeDashoffset={evolved.strokeDashoffset}
+        transform={`translate(${size + 2}, ${size + 2})`}
+      />
+    </svg>
+  );
+};
+
+// ─── Morphing Shape (two SVG paths interpolate) ──────────────
+export const MorphingShape: React.FC<{
+  size?: number;
+  color: string;
+  x?: string;
+  y?: string;
+  fromShape?: 'circle' | 'star' | 'rect';
+  toShape?: 'circle' | 'star' | 'rect';
+}> = ({ size = 100, color, x = '50%', y = '50%', fromShape = 'circle', toShape = 'star' }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const progress = spring({ frame, fps, config: { damping: 14, stiffness: 40 } });
+
+  const shapeMap = {
+    circle: () => makeCircle({ radius: size }).path,
+    star: () => makeStar({ innerRadius: size * 0.4, outerRadius: size, points: 5 }).path,
+    rect: () => makeRect({ width: size * 1.6, height: size * 1.6, cornerRadius: size * 0.2 }).path,
+  };
+
+  const fromPath = shapeMap[fromShape]();
+  const toPath = shapeMap[toShape]();
+  const morphedPath = interpolatePath(progress, fromPath, toPath);
+  const rotation = frame * 0.3;
+
+  return (
+    <svg
+      width={size * 2.5}
+      height={size * 2.5}
+      viewBox={`${-size * 1.25} ${-size * 1.25} ${size * 2.5} ${size * 2.5}`}
+      style={{
+        position: 'absolute', left: x, top: y,
+        transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
+        pointerEvents: 'none', opacity: 0.15,
+      }}
+    >
+      <path d={morphedPath} fill={color} stroke={color} strokeWidth={1} />
+    </svg>
+  );
+};
+
+// ─── SVG Decoration Cluster ──────────────────────────────────
+export const SVGDecorationCluster: React.FC<{
+  color: string;
+  seed?: number;
+}> = ({ color, seed = 1 }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+
+  const items = React.useMemo(() => {
+    const rng = (n: number) => {
+      let s = seed + n * 7919;
+      s = ((s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+      return s;
+    };
+    return Array.from({ length: 8 }, (_, i) => ({
+      x: 5 + rng(i) * 90,
+      y: 5 + rng(i + 50) * 90,
+      size: 15 + rng(i + 100) * 25,
+      type: Math.floor(rng(i + 150) * 3) as 0 | 1 | 2,
+      delay: Math.floor(rng(i + 200) * 20),
+    }));
+  }, [seed]);
+
+  return (
+    <>
+      {items.map((item, i) => {
+        const progress = spring({
+          frame: Math.max(0, frame - item.delay),
+          fps, config: { damping: 14, stiffness: 60 },
+        });
+        const rotation = frame * (0.2 + i * 0.1);
+        const pathData =
+          item.type === 0 ? makeCircle({ radius: item.size / 2 }).path
+          : item.type === 1 ? makeTriangle({ length: item.size, direction: 'up' }).path
+          : makeStar({ innerRadius: item.size * 0.3, outerRadius: item.size / 2, points: 4 }).path;
+        const evolved = evolvePath(progress, pathData);
+
+        return (
+          <svg
+            key={i}
+            width={item.size + 4}
+            height={item.size + 4}
+            style={{
+              position: 'absolute',
+              left: `${item.x}%`, top: `${item.y}%`,
+              transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
+              pointerEvents: 'none', opacity: 0.25,
+            }}
+          >
+            <path
+              d={pathData}
+              fill="none"
+              stroke={color}
+              strokeWidth={1}
+              strokeDasharray={evolved.strokeDasharray}
+              strokeDashoffset={evolved.strokeDashoffset}
+              transform="translate(2, 2)"
+            />
+          </svg>
+        );
+      })}
+    </>
+  );
+};
+
+// ─── Animated Progress Bar ───────────────────────────────────
+export const AnimatedProgressBar: React.FC<{
+  value: number; // 0-100
+  color: string;
+  height?: number;
+  width?: number | string;
+  label?: string;
+  delay?: number;
+}> = ({ value, color, height = 6, width = '100%', label, delay = 0 }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const progress = spring({
+    frame: Math.max(0, frame - delay), fps,
+    config: { damping: 20, stiffness: 50 },
+  });
+  const fillWidth = interpolate(progress, [0, 1], [0, value]);
+
+  return (
+    <div style={{ width }}>
+      {label && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+          <span style={{ fontSize: 12, color: '#A3A3A3', fontFamily: "'Inter', sans-serif" }}>{label}</span>
+          <span style={{ fontSize: 12, color, fontFamily: "'Inter', sans-serif" }}>{Math.round(fillWidth)}%</span>
+        </div>
+      )}
+      <div style={{ width: '100%', height, backgroundColor: '#1a1a1a', borderRadius: height / 2, overflow: 'hidden' }}>
+        <div style={{
+          width: `${fillWidth}%`, height: '100%', borderRadius: height / 2,
+          background: `linear-gradient(90deg, ${color}cc, ${color})`,
+          boxShadow: `0 0 10px ${color}40`,
+        }} />
+      </div>
+    </div>
+  );
+};
+
+// ─── Animated Bar Chart ──────────────────────────────────────
+export const AnimatedBarChart: React.FC<{
+  bars: Array<{ label: string; value: number; color: string }>;
+  height?: number;
+  barWidth?: number;
+  gap?: number;
+}> = ({ bars, height = 120, barWidth = 40, gap = 12 }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const maxVal = Math.max(...bars.map(b => b.value), 1);
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap, height }}>
+      {bars.map((bar, i) => {
+        const progress = spring({
+          frame: Math.max(0, frame - 5 - i * 5), fps,
+          config: { damping: 14, stiffness: 60 },
+        });
+        const barHeight = interpolate(progress, [0, 1], [0, (bar.value / maxVal) * height * 0.85]);
+        return (
+          <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+            <div style={{
+              width: barWidth, height: barHeight, borderRadius: 6,
+              background: `linear-gradient(180deg, ${bar.color}, ${bar.color}80)`,
+              boxShadow: `0 0 15px ${bar.color}25`,
+            }} />
+            <span style={{ fontSize: 10, color: '#A3A3A3', fontFamily: "'Inter', sans-serif", textAlign: 'center' }}>
+              {bar.label}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+// ─── Animated Donut Ring ─────────────────────────────────────
+export const AnimatedDonutRing: React.FC<{
+  percentage: number;
+  color: string;
+  size?: number;
+  strokeWidth?: number;
+  label?: string;
+}> = ({ percentage, color, size = 80, strokeWidth = 6, label }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const progress = spring({ frame, fps, config: { damping: 18, stiffness: 40 } });
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const fillAmount = interpolate(progress, [0, 1], [circumference, circumference * (1 - percentage / 100)]);
+
+  return (
+    <div style={{ position: 'relative', width: size, height: size }}>
+      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#1a1a1a" strokeWidth={strokeWidth} />
+        <circle
+          cx={size / 2} cy={size / 2} r={radius}
+          fill="none" stroke={color} strokeWidth={strokeWidth}
+          strokeDasharray={circumference}
+          strokeDashoffset={fillAmount}
+          strokeLinecap="round"
+          style={{ filter: `drop-shadow(0 0 6px ${color}40)` }}
+        />
+      </svg>
+      {label && (
+        <div style={{
+          position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 14, fontWeight: 700, color, fontFamily: "'Inter', sans-serif",
+        }}>
+          {Math.round(percentage * progress)}%
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── Staggered Reveal Wrapper ────────────────────────────────
+export const StaggeredReveal: React.FC<{
+  children: React.ReactNode[];
+  staggerDelay?: number;
+  direction?: 'up' | 'down' | 'left' | 'scale';
+}> = ({ children, staggerDelay = 4, direction = 'up' }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+
+  return (
+    <>
+      {React.Children.map(children, (child, i) => {
+        const p = spring({
+          frame: Math.max(0, frame - i * staggerDelay), fps,
+          config: { damping: 12, stiffness: 80 },
+        });
+        const transform =
+          direction === 'up' ? `translateY(${interpolate(p, [0, 1], [25, 0])}px)`
+          : direction === 'down' ? `translateY(${interpolate(p, [0, 1], [-25, 0])}px)`
+          : direction === 'left' ? `translateX(${interpolate(p, [0, 1], [-30, 0])}px)`
+          : `scale(${interpolate(p, [0, 1], [0.85, 1])})`;
+
+        return (
+          <div style={{ opacity: p, transform }}>
+            {child}
+          </div>
+        );
+      })}
+    </>
+  );
+};
+
+// ─── Expanding Ring (reusable) ───────────────────────────────
+export const ExpandingRing: React.FC<{
+  color: string;
+  size?: number;
+  duration?: number;
+}> = ({ color, size = 250, duration = 40 }) => {
+  const frame = useCurrentFrame();
+  const scale = interpolate(frame, [0, duration], [0.5, 2], { extrapolateRight: 'clamp' });
+  const opacity = interpolate(frame, [0, duration], [0.25, 0], { extrapolateRight: 'clamp' });
+
+  return (
+    <div style={{
+      position: 'absolute', top: '50%', left: '50%',
+      width: size, height: size, borderRadius: '50%',
+      border: `2px solid ${color}`,
+      transform: `translate(-50%, -50%) scale(${scale})`,
+      opacity, pointerEvents: 'none',
+    }} />
   );
 };
