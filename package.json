@@ -10,11 +10,13 @@
   },
   "dependencies": {
     "@remotion/animation-utils": "4.0.440",
+    "@remotion/media-parser": "4.0.440",
     "@remotion/noise": "4.0.440",
     "@remotion/paths": "4.0.440",
     "@remotion/player": "4.0.440",
     "@remotion/shapes": "4.0.440",
     "@remotion/transitions": "4.0.440",
+    "@remotion/webcodecs": "4.0.440",
     "html-to-image": "^1.11.13",
     "lucide-react": "^0.460.0",
     "react": "^19.0.0",

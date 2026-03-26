@@ -6,9 +6,26 @@ export interface ExportProgress {
   status: string;
 }
 
+const FRAME_CAPTURE_TIMEOUT = 3000; // 3s max per frame
+const GLOBAL_EXPORT_TIMEOUT = 180_000; // 3 minutes max total
+
 /**
- * Export the Remotion player as a WebM video by stepping through each frame,
+ * Wrap a promise with a timeout. Rejects if the promise doesn't resolve in time.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Timeout: ${label} took longer than ${ms}ms`)), ms);
+    promise.then(
+      (val) => { clearTimeout(timer); resolve(val); },
+      (err) => { clearTimeout(timer); reject(err); },
+    );
+  });
+}
+
+/**
+ * Export the Remotion player as a video by stepping through each frame,
  * capturing the DOM with html-to-image, and recording via MediaRecorder.
+ * After recording, converts WebM to MP4 using @remotion/webcodecs if available.
  */
 export async function exportVideo(
   playerRef: React.RefObject<PlayerRef | null>,
@@ -21,97 +38,154 @@ export async function exportVideo(
   const container = containerRef.current;
   if (!player || !container) throw new Error('Player not found');
 
-  // Find the actual Remotion rendering container (the composition area)
-  const remotionContainer = container.querySelector('[data-remotion-canvas]') as HTMLElement
-    || container.querySelector('div[style*="overflow"]') as HTMLElement
-    || container;
+  // Global timeout abort
+  const abortController = new AbortController();
+  const globalTimer = setTimeout(() => abortController.abort(), GLOBAL_EXPORT_TIMEOUT);
 
-  // Create recording canvas
-  const rect = remotionContainer.getBoundingClientRect();
-  const width = Math.round(rect.width);
-  const height = Math.round(rect.height);
+  try {
+    // Find the actual Remotion rendering container
+    const remotionContainer = container.querySelector('[data-remotion-canvas]') as HTMLElement
+      || container.querySelector('div[style*="overflow"]') as HTMLElement
+      || container;
 
-  const recordCanvas = document.createElement('canvas');
-  recordCanvas.width = width * 2;
-  recordCanvas.height = height * 2;
-  const ctx = recordCanvas.getContext('2d')!;
+    const rect = remotionContainer.getBoundingClientRect();
+    const width = Math.round(rect.width);
+    const height = Math.round(rect.height);
 
-  // Setup MediaRecorder
-  const stream = recordCanvas.captureStream(fps);
-  const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-    ? 'video/webm;codecs=vp9'
-    : MediaRecorder.isTypeSupported('video/webm;codecs=vp8')
-    ? 'video/webm;codecs=vp8'
-    : 'video/webm';
+    // Create recording canvas (1x pixel ratio for speed and memory)
+    const recordCanvas = document.createElement('canvas');
+    recordCanvas.width = width;
+    recordCanvas.height = height;
+    const ctx = recordCanvas.getContext('2d')!;
 
-  const recorder = new MediaRecorder(stream, {
-    mimeType,
-    videoBitsPerSecond: 8_000_000,
-  });
+    // Setup MediaRecorder
+    const stream = recordCanvas.captureStream(fps);
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+      ? 'video/webm;codecs=vp9'
+      : MediaRecorder.isTypeSupported('video/webm;codecs=vp8')
+      ? 'video/webm;codecs=vp8'
+      : 'video/webm';
 
-  const chunks: Blob[] = [];
-  recorder.ondataavailable = (e) => {
-    if (e.data.size > 0) chunks.push(e.data);
-  };
+    const recorder = new MediaRecorder(stream, {
+      mimeType,
+      videoBitsPerSecond: 5_000_000,
+    });
 
-  // Pause player, seek to start
-  player.pause();
-  player.seekTo(0);
-  await waitMs(100);
+    const chunks: Blob[] = [];
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) chunks.push(e.data);
+    };
 
-  // Start recording
-  recorder.start();
+    // Pause player, seek to start
+    player.pause();
+    player.seekTo(0);
+    await waitMs(150);
 
-  // Step through frames (capture at half fps for speed, each frame drawn twice)
-  const captureEvery = 2; // capture every 2nd frame for speed
-  const totalCaptures = Math.ceil(durationInFrames / captureEvery);
+    // Start recording
+    recorder.start();
 
-  for (let i = 0; i < durationInFrames; i += captureEvery) {
-    player.seekTo(i);
-    await waitMs(50); // let the DOM render
+    // Step through frames
+    const captureEvery = 2;
+    let failedFrames = 0;
 
-    try {
-      const capturedCanvas = await toCanvas(remotionContainer, {
-        width: width,
-        height: height,
-        pixelRatio: 2,
-        cacheBust: true,
-        skipFonts: false,
-        filter: (node: HTMLElement) => {
-          // Skip the player controls overlay
-          const tag = node.tagName?.toLowerCase();
-          if (tag === 'button' || node.getAttribute?.('data-remotion-controls') !== null) {
-            return false;
-          }
-          return true;
-        },
-      });
+    for (let i = 0; i < durationInFrames; i += captureEvery) {
+      if (abortController.signal.aborted) throw new Error('Export timed out');
 
-      ctx.clearRect(0, 0, recordCanvas.width, recordCanvas.height);
-      ctx.drawImage(capturedCanvas, 0, 0, recordCanvas.width, recordCanvas.height);
+      player.seekTo(i);
+      await waitMs(60);
 
-      // Hold this frame for the skipped frames (draw duration)
+      try {
+        const capturedCanvas = await withTimeout(
+          toCanvas(remotionContainer, {
+            width,
+            height,
+            pixelRatio: 1,
+            cacheBust: true,
+            skipFonts: false,
+            filter: (node: HTMLElement) => {
+              const tag = node.tagName?.toLowerCase();
+              if (tag === 'button' || node.getAttribute?.('data-remotion-controls') !== null) {
+                return false;
+              }
+              return true;
+            },
+          }),
+          FRAME_CAPTURE_TIMEOUT,
+          `Frame ${i}`,
+        );
+
+        ctx.clearRect(0, 0, recordCanvas.width, recordCanvas.height);
+        ctx.drawImage(capturedCanvas, 0, 0, recordCanvas.width, recordCanvas.height);
+      } catch {
+        failedFrames++;
+        // Hold previous frame on failure -- don't block
+      }
+
+      // Hold this frame for the duration of skipped frames
       await waitMs(Math.round((captureEvery / fps) * 1000));
-    } catch {
-      // If capture fails for a frame, just hold the previous frame
-      await waitMs(Math.round((captureEvery / fps) * 1000));
+
+      const progress = Math.round(((i + captureEvery) / durationInFrames) * 85);
+      onProgress({ percent: Math.min(progress, 85), status: `Recording frames... (${Math.round((i / durationInFrames) * 100)}%)` });
     }
 
-    const progress = Math.round(((i + captureEvery) / durationInFrames) * 100);
-    onProgress({ percent: Math.min(progress, 99), status: 'Recording frames...' });
+    if (failedFrames > durationInFrames * 0.5) {
+      throw new Error(`Too many frames failed to capture (${failedFrames}). Try refreshing and retrying.`);
+    }
+
+    // Finish recording
+    onProgress({ percent: 88, status: 'Encoding video...' });
+
+    const webmBlob = await new Promise<Blob>((resolve, reject) => {
+      const stopTimer = setTimeout(() => reject(new Error('MediaRecorder stop timed out')), 10_000);
+      recorder.onstop = () => {
+        clearTimeout(stopTimer);
+        const blob = new Blob(chunks, { type: mimeType });
+        resolve(blob);
+      };
+      recorder.onerror = () => {
+        clearTimeout(stopTimer);
+        reject(new Error('Export encoding failed'));
+      };
+      recorder.stop();
+    });
+
+    // Try to convert WebM to MP4 using @remotion/webcodecs
+    onProgress({ percent: 90, status: 'Converting to MP4...' });
+    try {
+      const mp4Blob = await convertWebmToMp4(webmBlob, onProgress);
+      return mp4Blob;
+    } catch {
+      // Fallback: return WebM if MP4 conversion fails
+      onProgress({ percent: 99, status: 'Downloaded as WebM (MP4 conversion unavailable)' });
+      return webmBlob;
+    }
+  } finally {
+    clearTimeout(globalTimer);
   }
+}
 
-  // Finish recording
-  onProgress({ percent: 99, status: 'Encoding...' });
+/**
+ * Convert a WebM blob to MP4 using @remotion/webcodecs.
+ * Falls back to returning the original blob if the browser doesn't support WebCodecs.
+ */
+async function convertWebmToMp4(
+  webmBlob: Blob,
+  onProgress: (p: ExportProgress) => void,
+): Promise<Blob> {
+  const { convertMedia } = await import('@remotion/webcodecs');
 
-  return new Promise<Blob>((resolve, reject) => {
-    recorder.onstop = () => {
-      const blob = new Blob(chunks, { type: mimeType });
-      resolve(blob);
-    };
-    recorder.onerror = () => reject(new Error('Export failed. Try reducing video quality in Settings and retry.'));
-    recorder.stop();
+  const file = new File([webmBlob], 'recording.webm', { type: 'video/webm' });
+
+  const result = await convertMedia({
+    src: file,
+    container: 'mp4',
+    videoCodec: 'h264',
+    audioCodec: 'aac',
   });
+
+  onProgress({ percent: 98, status: 'Saving MP4...' });
+  const mp4Blob = await result.save();
+  return mp4Blob;
 }
 
 /**
@@ -141,10 +215,9 @@ export async function exportPNGFrames(
   const frames: Blob[] = [];
 
   for (let i = 0; i < sceneCount; i++) {
-    // Seek to 30% into each scene (past the entrance animation)
     const targetFrame = Math.floor(framesPerScene * i + framesPerScene * 0.3);
     player.seekTo(targetFrame);
-    await waitMs(200); // longer wait for clean render
+    await waitMs(200);
 
     onProgress({
       percent: Math.round(((i + 1) / sceneCount) * 80),
@@ -152,12 +225,16 @@ export async function exportPNGFrames(
     });
 
     try {
-      const canvas = await toCanvas(remotionContainer, {
-        width,
-        height,
-        pixelRatio: 2,
-        cacheBust: true,
-      });
+      const canvas = await withTimeout(
+        toCanvas(remotionContainer, {
+          width,
+          height,
+          pixelRatio: 2,
+          cacheBust: true,
+        }),
+        FRAME_CAPTURE_TIMEOUT,
+        `Scene ${i + 1}`,
+      );
 
       const blob = await new Promise<Blob>((res) =>
         canvas.toBlob((b) => res(b!), 'image/png')
@@ -197,7 +274,6 @@ export function downloadBlob(blob: Blob, filename: string) {
 }
 
 export async function downloadPNGZip(blobs: Blob[], baseName: string) {
-  // Download each frame separately
   blobs.forEach((blob, i) => {
     setTimeout(() => {
       downloadBlob(blob, `${baseName}-scene-${i + 1}.png`);

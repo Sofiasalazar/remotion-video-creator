@@ -55,7 +55,7 @@ export default function App() {
             FPS,
             setExportProgress
           );
-          downloadBlob(blob, `video-${project.template}-${Date.now()}.webm`);
+          downloadBlob(blob, `video-${project.template}-${Date.now()}.mp4`);
         } else {
           setExportProgress({ percent: 0, status: 'Capturing frames...' });
           const frames = await exportPNGFrames(
