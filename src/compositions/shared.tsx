@@ -138,12 +138,12 @@ export const GlowCard: React.FC<{
       width,
       padding,
       borderRadius: 16,
-      border: `1px solid ${glowColor}40`,
-      background: 'rgba(20, 20, 20, 0.8)',
+      border: `1.5px solid ${glowColor}90`,
+      background: 'rgba(14, 14, 20, 0.9)',
       boxShadow: `
-        0 0 20px ${glowColor}20,
-        0 0 60px ${glowColor}10,
-        inset 0 1px 0 rgba(255,255,255,0.05)
+        0 0 15px ${glowColor}50,
+        0 0 40px ${glowColor}25,
+        inset 0 1px 0 rgba(255,255,255,0.08)
       `,
       backdropFilter: 'blur(10px)',
       ...style,
@@ -488,7 +488,7 @@ export const MorphingShape: React.FC<{
       style={{
         position: 'absolute', left: x, top: y,
         transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
-        pointerEvents: 'none', opacity: 0.35,
+        pointerEvents: 'none', opacity: 0.5,
       }}
     >
       <path d={morphedPath} fill={color} stroke={color} strokeWidth={1} />
@@ -542,7 +542,7 @@ export const SVGDecorationCluster: React.FC<{
               position: 'absolute',
               left: `${item.x}%`, top: `${item.y}%`,
               transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
-              pointerEvents: 'none', opacity: 0.4,
+              pointerEvents: 'none', opacity: 0.55,
             }}
           >
             <path
@@ -586,11 +586,11 @@ export const AnimatedProgressBar: React.FC<{
           <span style={{ fontSize: 12, color, fontFamily: "'Inter', sans-serif" }}>{Math.round(fillWidth)}%</span>
         </div>
       )}
-      <div style={{ width: '100%', height, backgroundColor: '#1a1a1a', borderRadius: height / 2, overflow: 'hidden' }}>
+      <div style={{ width: '100%', height, backgroundColor: '#1a1a2a', borderRadius: height / 2, overflow: 'hidden', border: '1px solid #2a2a3a' }}>
         <div style={{
           width: `${fillWidth}%`, height: '100%', borderRadius: height / 2,
-          background: `linear-gradient(90deg, ${color}cc, ${color})`,
-          boxShadow: `0 0 10px ${color}40`,
+          background: `linear-gradient(90deg, ${color}dd, ${color})`,
+          boxShadow: `0 0 15px ${color}60, 0 0 30px ${color}30`,
         }} />
       </div>
     </div>
@@ -620,8 +620,9 @@ export const AnimatedBarChart: React.FC<{
           <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
             <div style={{
               width: barWidth, height: barHeight, borderRadius: 6,
-              background: `linear-gradient(180deg, ${bar.color}, ${bar.color}80)`,
-              boxShadow: `0 0 15px ${bar.color}25`,
+              background: `linear-gradient(180deg, ${bar.color}, ${bar.color}aa)`,
+              boxShadow: `0 0 15px ${bar.color}50, 0 0 30px ${bar.color}25`,
+              border: `1px solid ${bar.color}60`,
             }} />
             <span style={{ fontSize: 10, color: '#A3A3A3', fontFamily: "'Inter', sans-serif", textAlign: 'center' }}>
               {bar.label}
@@ -651,14 +652,14 @@ export const AnimatedDonutRing: React.FC<{
   return (
     <div style={{ position: 'relative', width: size, height: size }}>
       <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#1a1a1a" strokeWidth={strokeWidth} />
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#1a1a2a" strokeWidth={strokeWidth} />
         <circle
           cx={size / 2} cy={size / 2} r={radius}
           fill="none" stroke={color} strokeWidth={strokeWidth}
           strokeDasharray={circumference}
           strokeDashoffset={fillAmount}
           strokeLinecap="round"
-          style={{ filter: `drop-shadow(0 0 6px ${color}40)` }}
+          style={{ filter: `drop-shadow(0 0 8px ${color}80) drop-shadow(0 0 20px ${color}40)` }}
         />
       </svg>
       {label && (

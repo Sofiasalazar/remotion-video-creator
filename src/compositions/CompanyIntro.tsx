@@ -119,25 +119,27 @@ function OfferingGridSlide({ scene, fps, duration, font, weight }: {
           </GradientText>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, width: '100%', maxWidth: 1050 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, width: '100%', maxWidth: 1050 }}>
           <StaggeredReveal staggerDelay={3} direction="scale">
             {items.slice(0, 6).map((item, i) => {
               const color = glowColors[i % glowColors.length];
               return (
                 <div key={i} style={{
-                  padding: 18, borderRadius: 14, border: `1px solid ${color}35`,
-                  background: `linear-gradient(145deg, ${color}06, ${color}02, transparent)`,
-                  boxShadow: `0 0 20px ${color}12, 0 0 40px ${color}06, inset 0 1px 0 rgba(255,255,255,0.03)`,
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, minHeight: 100, justifyContent: 'center',
+                  padding: 20, borderRadius: 16, border: `1.5px solid ${color}80`,
+                  background: `linear-gradient(145deg, ${color}15, ${color}08, rgba(10,10,15,0.95))`,
+                  boxShadow: `0 0 20px ${color}40, 0 0 50px ${color}15, inset 0 1px 0 rgba(255,255,255,0.06)`,
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, minHeight: 110, justifyContent: 'center',
                 }}>
                   {item.icon && (
                     <div style={{
-                      fontSize: 26, width: 44, height: 44, borderRadius: 12,
-                      background: `${color}12`, border: `1px solid ${color}25`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 15px ${color}15`,
+                      fontSize: 28, width: 50, height: 50, borderRadius: 14,
+                      background: `linear-gradient(135deg, ${color}30, ${color}10)`,
+                      border: `1px solid ${color}50`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: `0 0 20px ${color}30`,
                     }}>{item.icon}</div>
                   )}
-                  <span style={{ fontFamily: font, fontWeight: 600, fontSize: 14, color: '#F5F5F5', textAlign: 'center', lineHeight: 1.3 }}>{item.text}</span>
+                  <span style={{ fontFamily: font, fontWeight: 600, fontSize: 15, color: '#F5F5F5', textAlign: 'center', lineHeight: 1.4 }}>{item.text}</span>
                 </div>
               );
             })}
