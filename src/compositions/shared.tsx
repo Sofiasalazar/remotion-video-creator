@@ -488,7 +488,7 @@ export const MorphingShape: React.FC<{
       style={{
         position: 'absolute', left: x, top: y,
         transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
-        pointerEvents: 'none', opacity: 0.15,
+        pointerEvents: 'none', opacity: 0.35,
       }}
     >
       <path d={morphedPath} fill={color} stroke={color} strokeWidth={1} />
@@ -542,7 +542,7 @@ export const SVGDecorationCluster: React.FC<{
               position: 'absolute',
               left: `${item.x}%`, top: `${item.y}%`,
               transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
-              pointerEvents: 'none', opacity: 0.25,
+              pointerEvents: 'none', opacity: 0.4,
             }}
           >
             <path

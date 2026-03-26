@@ -172,11 +172,6 @@ export const WizardPanel: React.FC<Props> = ({
                     duration={project.duration}
                     onConceptChange={(v) => setProject((p) => ({ ...p, concept: v }))}
                     onDurationChange={(v) => setProject((p) => ({ ...p, duration: v }))}
-                    apiKey={apiKey}
-                    hasTemplate={!!project.template}
-                    aiLoading={aiLoading}
-                    aiError={aiError}
-                    onAIEnhance={handleAIEnhance}
                     onNext={() => goNext(1)}
                     validationError={validationErrors.concept}
                   />
@@ -209,6 +204,11 @@ export const WizardPanel: React.FC<Props> = ({
                     onFontStyleChange={(v) => setProject((p) => ({ ...p, fontStyle: v }))}
                     onPreview={onPreview}
                     showPreview={showPreview}
+                    apiKey={apiKey}
+                    aiLoading={aiLoading}
+                    aiError={aiError}
+                    onAIEnhance={handleAIEnhance}
+                    concept={project.concept}
                   />
                 )}
                 {step.num === 4 && (
@@ -242,11 +242,6 @@ function Step1Concept({
   duration,
   onConceptChange,
   onDurationChange,
-  apiKey,
-  hasTemplate,
-  aiLoading,
-  aiError,
-  onAIEnhance,
   onNext,
   validationError,
 }: {
@@ -254,11 +249,6 @@ function Step1Concept({
   duration: DurationOption;
   onConceptChange: (v: string) => void;
   onDurationChange: (v: DurationOption) => void;
-  apiKey: string;
-  hasTemplate: boolean;
-  aiLoading: boolean;
-  aiError: string | null;
-  onAIEnhance: () => void;
   onNext: () => void;
   validationError?: string;
 }) {
@@ -302,39 +292,6 @@ function Step1Concept({
           ))}
         </div>
       </div>
-
-      {/* AI Enhance */}
-      <button
-        onClick={onAIEnhance}
-        disabled={!apiKey || !hasTemplate || aiLoading || !concept.trim()}
-        className={`w-full h-10 rounded-lg text-[14px] font-semibold flex items-center justify-center gap-2 transition-colors focus:outline-none focus:ring-2 focus:ring-[#8b5cf6] ${
-          !apiKey || !hasTemplate || aiLoading || !concept.trim()
-            ? 'bg-[#262626] text-[#A3A3A3] cursor-not-allowed'
-            : 'bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500'
-        }`}
-      >
-        {aiLoading ? (
-          <>
-            <Loader2 size={16} className="animate-spin" />
-            Generating script...
-          </>
-        ) : (
-          <>
-            <Sparkles size={16} />
-            {apiKey
-              ? hasTemplate
-                ? 'Enhance with AI'
-                : 'Enhance with AI (select template first)'
-              : 'Enhance with AI (set API key first)'}
-          </>
-        )}
-      </button>
-
-      {aiError && (
-        <div className="bg-[rgba(239,68,68,0.1)] border border-[#ef4444] rounded-lg px-4 py-3 text-[13px] text-[#ef4444]">
-          {aiError}
-        </div>
-      )}
 
       {/* Next */}
       <button
@@ -429,6 +386,11 @@ function Step3Customize({
   onFontStyleChange,
   onPreview,
   showPreview,
+  apiKey,
+  aiLoading,
+  aiError,
+  onAIEnhance,
+  concept,
 }: {
   scenes: SceneData[];
   onUpdateScene: (i: number, field: keyof SceneData, value: string) => void;
@@ -440,6 +402,11 @@ function Step3Customize({
   onFontStyleChange: (v: FontStyle) => void;
   onPreview: () => void;
   showPreview: boolean;
+  apiKey: string;
+  aiLoading: boolean;
+  aiError: string | null;
+  onAIEnhance: () => void;
+  concept: string;
 }) {
   const [expandedScene, setExpandedScene] = useState(0);
 
@@ -500,13 +467,13 @@ function Step3Customize({
                       Body text
                     </label>
                     <span className="text-[11px] text-[#A3A3A3]">
-                      {scene.body.length}/120
+                      {scene.body.length}/500
                     </span>
                   </div>
                   <textarea
                     value={scene.body}
                     onChange={(e) =>
-                      e.target.value.length <= 120 &&
+                      e.target.value.length <= 500 &&
                       onUpdateScene(i, 'body', e.target.value)
                     }
                     className="w-full h-[80px] bg-[#0A0A0A] border border-[#262626] rounded-lg px-3 py-2 text-[14px] text-[#F5F5F5] resize-none focus:outline-none focus:border-[#8b5cf6] focus:ring-2 focus:ring-[#8b5cf6]/30"
@@ -612,6 +579,37 @@ function Step3Customize({
               <option value="elegant">Elegant (Serif)</option>
             </select>
           </div>
+        </div>
+      )}
+
+      {/* AI Enhance - available here after template is selected */}
+      {apiKey && (
+        <button
+          onClick={onAIEnhance}
+          disabled={aiLoading || !concept.trim() || scenes.length === 0}
+          className={`w-full h-10 rounded-lg text-[14px] font-semibold flex items-center justify-center gap-2 transition-colors focus:outline-none focus:ring-2 focus:ring-[#8b5cf6] ${
+            aiLoading || !concept.trim() || scenes.length === 0
+              ? 'bg-[#262626] text-[#A3A3A3] cursor-not-allowed'
+              : 'bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500'
+          }`}
+        >
+          {aiLoading ? (
+            <>
+              <Loader2 size={16} className="animate-spin" />
+              Generating script...
+            </>
+          ) : (
+            <>
+              <Sparkles size={16} />
+              Enhance with AI
+            </>
+          )}
+        </button>
+      )}
+
+      {aiError && (
+        <div className="bg-[rgba(239,68,68,0.1)] border border-[#ef4444] rounded-lg px-4 py-3 text-[13px] text-[#ef4444]">
+          {aiError}
         </div>
       )}
 
