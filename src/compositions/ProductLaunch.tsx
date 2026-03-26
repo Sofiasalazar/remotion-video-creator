@@ -127,16 +127,18 @@ function FeatureGridSlide({ scene, fps, duration, font, weight }: {
               const color = glowColors[i % glowColors.length];
               return (
                 <div key={i} style={{
-                  padding: 20, borderRadius: 14, border: `1px solid ${color}50`,
-                  background: `linear-gradient(135deg, ${color}08, ${color}03)`,
-                  boxShadow: `0 0 25px ${color}15, inset 0 1px 0 rgba(255,255,255,0.04)`,
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, minHeight: 100,
+                  padding: 20, borderRadius: 16, border: `1.5px solid ${color}80`,
+                  background: `linear-gradient(135deg, ${color}15, ${color}06, rgba(10,10,15,0.95))`,
+                  boxShadow: `0 0 20px ${color}40, 0 0 50px ${color}15, inset 0 1px 0 rgba(255,255,255,0.06)`,
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, minHeight: 110,
                 }}>
                   {item.icon && (
                     <div style={{
-                      fontSize: 28, width: 48, height: 48, borderRadius: 12,
-                      background: `${color}15`, border: `1px solid ${color}30`,
+                      fontSize: 28, width: 50, height: 50, borderRadius: 14,
+                      background: `linear-gradient(135deg, ${color}30, ${color}10)`,
+                      border: `1px solid ${color}50`,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: `0 0 20px ${color}30`,
                     }}>{item.icon}</div>
                   )}
                   <span style={{ fontFamily: font, fontWeight: 600, fontSize: 16, color: '#F5F5F5', textAlign: 'center' }}>{item.text}</span>

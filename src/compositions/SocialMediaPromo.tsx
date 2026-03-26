@@ -112,16 +112,18 @@ function ValueGridSlide({ scene, fps, duration, font, weight }: {
                 opacity: p, transform: `translateY(${interpolate(p, [0, 1], [25, 0])}px) scale(${interpolate(p, [0, 1], [0.92, 1])})`,
               }}>
                 <div style={{
-                  padding: 18, borderRadius: 14, border: `1px solid ${color}40`,
-                  background: `linear-gradient(135deg, ${color}08, transparent)`,
-                  boxShadow: `0 0 30px ${color}12`,
+                  padding: 20, borderRadius: 16, border: `1.5px solid ${color}80`,
+                  background: `linear-gradient(135deg, ${color}15, ${color}06, rgba(10,10,15,0.95))`,
+                  boxShadow: `0 0 20px ${color}40, 0 0 50px ${color}15`,
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 8 }}>
                     {item.icon && (
                       <div style={{
-                        fontSize: 24, width: 44, height: 44, borderRadius: 10,
-                        background: `${color}15`, border: `1px solid ${color}30`,
+                        fontSize: 24, width: 46, height: 46, borderRadius: 12,
+                        background: `linear-gradient(135deg, ${color}30, ${color}10)`,
+                        border: `1px solid ${color}50`,
                         display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                        boxShadow: `0 0 15px ${color}25`,
                       }}>{item.icon}</div>
                     )}
                     <span style={{ fontFamily: font, fontWeight: 600, fontSize: 18, color: '#F5F5F5' }}>{item.text}</span>

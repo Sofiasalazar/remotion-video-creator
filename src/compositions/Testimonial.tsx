@@ -131,15 +131,18 @@ function ResultsSlide({ scene, fps, duration, font, weight }: {
             return (
               <div key={i} style={{ opacity: p, transform: `translateY(${interpolate(p, [0, 1], [25, 0])}px)` }}>
                 <div style={{
-                  padding: 16, borderRadius: 14, border: `1px solid ${color}40`,
-                  background: `linear-gradient(135deg, ${color}08, transparent)`, boxShadow: `0 0 25px ${color}10`,
+                  padding: 18, borderRadius: 16, border: `1.5px solid ${color}80`,
+                  background: `linear-gradient(135deg, ${color}15, ${color}06, rgba(10,10,15,0.95))`,
+                  boxShadow: `0 0 20px ${color}40, 0 0 50px ${color}15`,
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
                     {item.icon && (
                       <div style={{
-                        fontSize: 22, width: 40, height: 40, borderRadius: 10,
-                        background: `${color}15`, border: `1px solid ${color}30`,
+                        fontSize: 22, width: 42, height: 42, borderRadius: 12,
+                        background: `linear-gradient(135deg, ${color}30, ${color}10)`,
+                        border: `1px solid ${color}50`,
                         display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                        boxShadow: `0 0 15px ${color}25`,
                       }}>{item.icon}</div>
                     )}
                     <span style={{ fontFamily: font, fontWeight: 600, fontSize: 16, color: '#F5F5F5' }}>{item.text}</span>
