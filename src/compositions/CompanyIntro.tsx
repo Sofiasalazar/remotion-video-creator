@@ -1,15 +1,16 @@
 import React from 'react';
-import { AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring } from 'remotion';
+import { AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, interpolateColors, spring } from 'remotion';
 import { TransitionSeries, linearTiming } from '@remotion/transitions';
 import { fade } from '@remotion/transitions/fade';
 import { wipe } from '@remotion/transitions/wipe';
 import type { SceneData, FontStyle } from '../types';
 import { parseItems } from '../lib/templates';
+import { SPRING, usePulse } from '../lib/animation';
 import {
   getFontFamily, getFontWeight, GradientBg, RadialGlow, Particles, GridPattern, GlowCard,
-  GradientText, NeonText, AnimatedDivider, FloatingShapes, MorphingShape, AnimatedCircle,
-  AnimatedTriangle, AnimatedStar, AnimatedProgressBar, SVGDecorationCluster, ExpandingRing,
-  StaggeredReveal,
+  GradientText, NeonText, AnimatedDivider, FloatingShapes, MorphingShape,
+  AnimatedStar, ExpandingRing,
+  OrbitLayout, TimelineLayout, ColorShiftGlow,
 } from './shared';
 
 interface Props { scenes: SceneData[]; fontStyle: FontStyle; }
@@ -33,11 +34,11 @@ export const CompanyIntro: React.FC<Props> = ({ scenes, fontStyle }) => {
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition presentation={wipe({ direction: 'from-right' })} timing={timing} />
         <TransitionSeries.Sequence durationInFrames={sceneDuration}>
-          <OfferingGridSlide scene={scenes[1]} fps={fps} duration={sceneDuration} font={font} weight={weight} />
+          <OfferingOrbitalSlide scene={scenes[1]} fps={fps} duration={sceneDuration} font={font} weight={weight} />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition presentation={fade()} timing={timing} />
         <TransitionSeries.Sequence durationInFrames={sceneDuration}>
-          <WhySlide scene={scenes[2]} fps={fps} duration={sceneDuration} font={font} weight={weight} />
+          <WhyTimelineSlide scene={scenes[2]} fps={fps} duration={sceneDuration} font={font} weight={weight} />
         </TransitionSeries.Sequence>
         {scenes.length > 3 && (
           <>
@@ -56,9 +57,12 @@ function BrandSlide({ scene, fps, duration, font, weight }: {
   scene: SceneData; fps: number; duration: number; font: string; weight: number;
 }) {
   const frame = useCurrentFrame();
-  const scale = spring({ frame, fps, config: { damping: 10, stiffness: 60 } });
+  const scale = spring({ frame, fps, config: SPRING.DRAMATIC });
   const lineWidth = interpolate(scale, [0, 1], [0, 180]);
-  const glowPulse = 0.25 + Math.sin(frame * 0.08) * 0.12;
+  const glowPulse = 0.25 + usePulse(0.08, 0.12);
+
+  // Gradient line color shift
+  const lineColor = interpolateColors(frame, [0, 25, 50], [scene.accentColor, '#c084fc', scene.accentColor]);
 
   return (
     <AbsoluteFill>
@@ -79,7 +83,7 @@ function BrandSlide({ scene, fps, duration, font, weight }: {
 
         <div style={{
           marginTop: 24, width: lineWidth, height: 4, borderRadius: 2,
-          background: `linear-gradient(90deg, transparent, ${scene.accentColor}, transparent)`,
+          background: `linear-gradient(90deg, transparent, ${lineColor}, transparent)`,
           boxShadow: `0 0 20px ${scene.accentColor}40`,
         }} />
 
@@ -94,63 +98,41 @@ function BrandSlide({ scene, fps, duration, font, weight }: {
   );
 }
 
-function OfferingGridSlide({ scene, fps, duration, font, weight }: {
+// Replaces OfferingGridSlide -- orbital layout with center node and orbiting items
+function OfferingOrbitalSlide({ scene, fps, duration, font, weight }: {
   scene: SceneData; fps: number; duration: number; font: string; weight: number;
 }) {
-  const frame = useCurrentFrame();
   const items = parseItems(scene.body);
-  const glowColors = ['#f59e0b', '#eab308', '#06b6d4', '#84cc16', '#3b82f6', '#8b5cf6'];
+
+  // Split headline: e.g. "The Complete Platform" -> "The Complete" + "Platform"
+  const headlineWords = scene.headline.split(' ');
+  const lastWord = headlineWords.pop() || '';
+  const firstPart = headlineWords.join(' ');
 
   return (
     <AbsoluteFill>
       <GradientBg color1="#0A0A0A" color2="#050510" />
-      <RadialGlow color="#8b5cf6" size={900} opacity={0.08} />
+      <ColorShiftGlow
+        colors={['#8b5cf6', '#06b6d4', '#84cc16', '#8b5cf6']}
+        size={500}
+        opacity={0.08}
+      />
       <Particles color="rgba(139,92,246,0.1)" count={12} seed={77} />
-      <AnimatedTriangle color="#06b6d4" size={30} x="5%" y="12%" />
-      <AnimatedCircle color="#84cc16" radius={25} x="95%" y="85%" />
 
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 36 }}>
-        <div style={{ opacity: interpolate(frame, [0, 10], [0, 1], { extrapolateRight: 'clamp' }), marginBottom: 32, textAlign: 'center' }}>
-          <div style={{ fontFamily: font, fontWeight: 600, fontSize: 22, color: '#F5F5F5', marginBottom: 4 }}>
-            {scene.headline.split(' ').slice(0, -1).join(' ') || scene.headline}
-          </div>
-          <GradientText from="#8b5cf6" to="#c084fc" fontSize={36} fontFamily={font} fontWeight={weight} style={{ textAlign: 'center' }}>
-            {scene.headline.split(' ').pop() || ''}
-          </GradientText>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, width: '100%', maxWidth: 1050 }}>
-          <StaggeredReveal staggerDelay={3} direction="scale">
-            {items.slice(0, 6).map((item, i) => {
-              const color = glowColors[i % glowColors.length];
-              return (
-                <div key={i} style={{
-                  padding: 20, borderRadius: 16, border: `1.5px solid ${color}80`,
-                  background: `linear-gradient(145deg, ${color}15, ${color}08, rgba(10,10,15,0.95))`,
-                  boxShadow: `0 0 20px ${color}40, 0 0 50px ${color}15, inset 0 1px 0 rgba(255,255,255,0.06)`,
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, minHeight: 110, justifyContent: 'center',
-                }}>
-                  {item.icon && (
-                    <div style={{
-                      fontSize: 28, width: 50, height: 50, borderRadius: 14,
-                      background: `linear-gradient(135deg, ${color}30, ${color}10)`,
-                      border: `1px solid ${color}50`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      boxShadow: `0 0 20px ${color}30`,
-                    }}>{item.icon}</div>
-                  )}
-                  <span style={{ fontFamily: font, fontWeight: 600, fontSize: 15, color: '#F5F5F5', textAlign: 'center', lineHeight: 1.4 }}>{item.text}</span>
-                </div>
-              );
-            })}
-          </StaggeredReveal>
-        </div>
-      </div>
+      <OrbitLayout
+        items={items.slice(0, 6)}
+        centerLabel={lastWord || scene.headline}
+        accentColor={scene.accentColor}
+        font={font}
+        weight={weight}
+        radius={230}
+      />
     </AbsoluteFill>
   );
 }
 
-function WhySlide({ scene, fps, duration, font, weight }: {
+// Replaces WhySlide card list with progress bars -- vertical timeline
+function WhyTimelineSlide({ scene, fps, duration, font, weight }: {
   scene: SceneData; fps: number; duration: number; font: string; weight: number;
 }) {
   const frame = useCurrentFrame();
@@ -162,31 +144,24 @@ function WhySlide({ scene, fps, duration, font, weight }: {
       <GradientBg color1="#0A0A0A" color2={`${scene.accentColor}08`} angle={135} />
       <RadialGlow color={scene.accentColor} size={600} opacity={0.15} />
       <Particles color={`${scene.accentColor}15`} count={12} seed={66} />
-      <SVGDecorationCluster color={scene.accentColor} seed={88} />
 
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 80px' }}>
-        <NeonText color="#F5F5F5" fontSize={38} fontFamily={font} fontWeight={weight}
-          glowIntensity={0.4} style={{ textAlign: 'center', marginBottom: 36 }}>
-          {scene.headline}
-        </NeonText>
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
+        {/* Headline */}
+        <div style={{ paddingTop: 50, textAlign: 'center' }}>
+          <NeonText color="#F5F5F5" fontSize={36} fontFamily={font} fontWeight={weight}
+            glowIntensity={0.4} style={{ textAlign: 'center' }}>
+            {scene.headline}
+          </NeonText>
+        </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 700, width: '100%' }}>
-          <StaggeredReveal staggerDelay={6} direction="left">
-            {items.map((item, i) => (
-              <GlowCard key={i} glowColor={scene.accentColor} padding={16}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <div style={{
-                    width: 8, height: 8, borderRadius: '50%', backgroundColor: scene.accentColor,
-                    boxShadow: `0 0 10px ${scene.accentColor}60`, flexShrink: 0,
-                  }} />
-                  <span style={{ fontFamily: font, fontWeight: 500, fontSize: 20, color: '#F5F5F5', flex: 1 }}>
-                    {item.icon} {item.text}
-                  </span>
-                  <AnimatedProgressBar value={80 + i * 5} color={scene.accentColor} height={3} width={100} delay={8 + i * 6} />
-                </div>
-              </GlowCard>
-            ))}
-          </StaggeredReveal>
+        {/* Timeline */}
+        <div style={{ flex: 1 }}>
+          <TimelineLayout
+            items={items}
+            accentColor={scene.accentColor}
+            font={font}
+            weight={weight}
+          />
         </div>
       </div>
     </AbsoluteFill>
@@ -198,7 +173,7 @@ function ContactSlide({ scene, fps, duration, font, weight }: {
 }) {
   const frame = useCurrentFrame();
   const fadeIn = interpolate(frame, [0, 15], [0, 1], { extrapolateRight: 'clamp' });
-  const pulse = 1 + Math.sin(frame * 0.1) * 0.02;
+  const pulse = 1 + usePulse(0.1, 0.02);
 
   return (
     <AbsoluteFill style={{ opacity: fadeIn }}>

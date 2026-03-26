@@ -1,16 +1,17 @@
 import React from 'react';
-import { AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring } from 'remotion';
+import { AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, interpolateColors, spring } from 'remotion';
 import { TransitionSeries, linearTiming } from '@remotion/transitions';
 import { fade } from '@remotion/transitions/fade';
 import { slide } from '@remotion/transitions/slide';
 import { wipe } from '@remotion/transitions/wipe';
 import type { SceneData, FontStyle } from '../types';
 import { parseItems } from '../lib/templates';
+import { SPRING, usePulse } from '../lib/animation';
 import {
-  getFontFamily, getFontWeight, GradientBg, RadialGlow, Particles, GridPattern, GlowCard,
+  getFontFamily, getFontWeight, GradientBg, RadialGlow, Particles, GridPattern,
   GradientText, NeonText, AnimatedDivider, FloatingShapes, MorphingShape, AnimatedCircle,
-  AnimatedTriangle, AnimatedProgressBar, AnimatedDonutRing, AnimatedBarChart,
-  SVGDecorationCluster, ExpandingRing, StaggeredReveal,
+  AnimatedDonutRing, SVGDecorationCluster, ExpandingRing, GlowCard,
+  SpotlightReveal, ColorShiftGlow, AnimatedProgressBar, StaggeredReveal,
 } from './shared';
 
 interface Props { scenes: SceneData[]; fontStyle: FontStyle; }
@@ -34,7 +35,7 @@ export const ProductLaunch: React.FC<Props> = ({ scenes, fontStyle }) => {
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition presentation={slide({ direction: 'from-left' })} timing={timing} />
         <TransitionSeries.Sequence durationInFrames={sceneDuration}>
-          <FeatureGridSlide scene={scenes[1]} fps={fps} duration={sceneDuration} font={font} weight={weight} />
+          <FeatureSpotlightSlide scene={scenes[1]} fps={fps} duration={sceneDuration} font={font} weight={weight} />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition presentation={fade()} timing={timing} />
         <TransitionSeries.Sequence durationInFrames={sceneDuration}>
@@ -57,9 +58,12 @@ function HeroSlide({ scene, fps, duration, font, weight }: {
   scene: SceneData; fps: number; duration: number; font: string; weight: number;
 }) {
   const frame = useCurrentFrame();
-  const titleScale = spring({ frame, fps, config: { damping: 12, stiffness: 80 } });
-  const subtitleProgress = spring({ frame: Math.max(0, frame - 12), fps, config: { damping: 14, stiffness: 60 } });
-  const glowPulse = 0.25 + Math.sin(frame * 0.08) * 0.1;
+  const titleScale = spring({ frame, fps, config: SPRING.DRAMATIC });
+  const subtitleProgress = spring({ frame: Math.max(0, frame - 12), fps, config: SPRING.SMOOTH });
+  const glowPulse = 0.25 + usePulse(0.08, 0.1);
+
+  // Color transition: glow shifts from deep to accent
+  const glowColor = interpolateColors(frame, [0, 30], ['#1a0533', scene.accentColor]);
 
   return (
     <AbsoluteFill>
@@ -67,7 +71,7 @@ function HeroSlide({ scene, fps, duration, font, weight }: {
       <GridPattern color={scene.accentColor} opacity={0.04} />
       <Particles color={`${scene.accentColor}30`} count={25} seed={1} />
       <FloatingShapes color={scene.accentColor} />
-      <RadialGlow color={scene.accentColor} size={900} opacity={glowPulse} />
+      <RadialGlow color={glowColor} size={900} opacity={glowPulse} />
       <MorphingShape color={scene.accentColor} size={140} fromShape="circle" toShape="star" x="80%" y="25%" />
       <AnimatedCircle color={scene.accentColor} radius={45} x="15%" y="70%" />
 
@@ -77,7 +81,7 @@ function HeroSlide({ scene, fps, duration, font, weight }: {
         background: `linear-gradient(90deg, transparent, ${scene.accentColor}, transparent)` }} />
 
       <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ transform: `scale(${titleScale})`, textAlign: 'center' }}>
+        <div style={{ transform: `scale(${interpolate(titleScale, [0, 1], [0.6, 1])})`, textAlign: 'center' }}>
           <GradientText from="#FFFFFF" to={scene.accentColor} fontSize={64} fontFamily={font} fontWeight={weight}
             style={{ padding: '0 60px', textAlign: 'center' }}>
             {scene.headline}
@@ -99,53 +103,49 @@ function HeroSlide({ scene, fps, duration, font, weight }: {
   );
 }
 
-function FeatureGridSlide({ scene, fps, duration, font, weight }: {
+// Replaces FeatureGridSlide -- spotlight carousel, one feature at a time
+function FeatureSpotlightSlide({ scene, fps, duration, font, weight }: {
   scene: SceneData; fps: number; duration: number; font: string; weight: number;
 }) {
   const frame = useCurrentFrame();
   const items = parseItems(scene.body);
-  const glowColors = ['#8b5cf6', '#06b6d4', '#f59e0b', '#84cc16', '#ec4899', '#3b82f6'];
+  const featureColors = ['#8b5cf6', '#06b6d4', '#f59e0b', '#84cc16', '#ec4899', '#3b82f6'];
+
+  // Headline fade-in
+  const headlineOpacity = interpolate(frame, [0, 12], [0, 1], { extrapolateRight: 'clamp' });
 
   return (
     <AbsoluteFill>
       <GradientBg color1="#0A0A0A" color2="#05051a" />
-      <RadialGlow color={scene.accentColor} size={800} opacity={0.12} />
       <Particles color="rgba(139,92,246,0.15)" count={15} seed={42} />
-      <AnimatedTriangle color={scene.accentColor} size={35} x="8%" y="15%" />
-      <AnimatedCircle color="#06b6d4" radius={30} x="92%" y="80%" />
+      <ColorShiftGlow
+        colors={featureColors.slice(0, Math.min(items.length, 6))}
+        size={700}
+        opacity={0.15}
+        y="55%"
+      />
 
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
-        <div style={{ opacity: interpolate(frame, [0, 10], [0, 1], { extrapolateRight: 'clamp' }), marginBottom: 36 }}>
-          <GradientText from="#FFFFFF" to={scene.accentColor} fontSize={38} fontFamily={font} fontWeight={weight} style={{ textAlign: 'center' }}>
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
+        {/* Headline */}
+        <div style={{
+          paddingTop: 50, textAlign: 'center',
+          opacity: headlineOpacity,
+        }}>
+          <GradientText from="#FFFFFF" to={scene.accentColor} fontSize={36} fontFamily={font} fontWeight={weight} style={{ textAlign: 'center' }}>
             {scene.headline}
           </GradientText>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, width: '100%', maxWidth: 1000 }}>
-          <StaggeredReveal staggerDelay={4} direction="up">
-            {items.slice(0, 6).map((item, i) => {
-              const color = glowColors[i % glowColors.length];
-              return (
-                <div key={i} style={{
-                  padding: 20, borderRadius: 16, border: `1.5px solid ${color}80`,
-                  background: `linear-gradient(135deg, ${color}15, ${color}06, rgba(10,10,15,0.95))`,
-                  boxShadow: `0 0 20px ${color}40, 0 0 50px ${color}15, inset 0 1px 0 rgba(255,255,255,0.06)`,
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, minHeight: 110,
-                }}>
-                  {item.icon && (
-                    <div style={{
-                      fontSize: 28, width: 50, height: 50, borderRadius: 14,
-                      background: `linear-gradient(135deg, ${color}30, ${color}10)`,
-                      border: `1px solid ${color}50`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      boxShadow: `0 0 20px ${color}30`,
-                    }}>{item.icon}</div>
-                  )}
-                  <span style={{ fontFamily: font, fontWeight: 600, fontSize: 16, color: '#F5F5F5', textAlign: 'center' }}>{item.text}</span>
-                </div>
-              );
-            })}
-          </StaggeredReveal>
+        {/* Spotlight area */}
+        <div style={{ flex: 1, position: 'relative' }}>
+          <SpotlightReveal
+            items={items.slice(0, 6)}
+            duration={duration}
+            accentColor={scene.accentColor}
+            font={font}
+            weight={weight}
+            colors={featureColors.slice(0, Math.min(items.length, 6))}
+          />
         </div>
       </div>
     </AbsoluteFill>
@@ -157,8 +157,8 @@ function MetricsSlide({ scene, fps, duration, font, weight }: {
 }) {
   const frame = useCurrentFrame();
   const items = parseItems(scene.body);
-  const mainScale = spring({ frame, fps, config: { damping: 8, stiffness: 50 } });
-  const glowPulse = 0.3 + Math.sin(frame * 0.1) * 0.15;
+  const mainScale = spring({ frame, fps, config: SPRING.DRAMATIC });
+  const glowPulse = 0.3 + usePulse(0.1, 0.15);
 
   return (
     <AbsoluteFill>
@@ -200,7 +200,10 @@ function CTASlide({ scene, fps, duration, font, weight }: {
 }) {
   const frame = useCurrentFrame();
   const fadeIn = interpolate(frame, [0, 15], [0, 1], { extrapolateRight: 'clamp' });
-  const btnPulse = 1 + Math.sin(frame * 0.1) * 0.03;
+  const btnPulse = 1 + usePulse(0.1, 0.03);
+
+  // Button glow color shift
+  const btnGlow = interpolateColors(frame, [0, 40, 80], [scene.accentColor, '#ec4899', scene.accentColor]);
 
   return (
     <AbsoluteFill style={{ opacity: fadeIn }}>
@@ -218,7 +221,7 @@ function CTASlide({ scene, fps, duration, font, weight }: {
             <div style={{
               padding: '16px 48px', borderRadius: 50,
               background: `linear-gradient(135deg, ${scene.accentColor}, ${scene.accentColor}cc)`,
-              boxShadow: `0 0 40px ${scene.accentColor}40, 0 0 80px ${scene.accentColor}15`,
+              boxShadow: `0 0 40px ${btnGlow}40, 0 0 80px ${btnGlow}15`,
             }}>
               <span style={{ fontFamily: font, fontWeight: 700, fontSize: 24, color: '#FFFFFF' }}>{scene.body}</span>
             </div>

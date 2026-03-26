@@ -9,6 +9,7 @@ import {
 import { TransitionSeries, linearTiming } from '@remotion/transitions';
 import { fade } from '@remotion/transitions/fade';
 import type { SceneData, FontStyle } from '../types';
+import { SPRING, usePulse } from '../lib/animation';
 import {
   getFontFamily,
   getFontWeight,
@@ -108,7 +109,7 @@ function ProblemSlide({ scene, fps, duration, font, weight }: {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center', marginBottom: 24 }}>
             {subPoints.map((point, i) => {
               const delay = duration * 0.5 + i * 5;
-              const p = spring({ frame: Math.max(0, frame - delay), fps, config: { damping: 14, stiffness: 80 } });
+              const p = spring({ frame: Math.max(0, frame - delay), fps, config: SPRING.SMOOTH });
               return (
                 <div key={i} style={{ opacity: p, transform: `translateY(${interpolate(p, [0, 1], [15, 0])}px)` }}>
                   <GlowCard glowColor={scene.accentColor} padding={10} style={{ paddingLeft: 20, paddingRight: 20 }}>
@@ -148,7 +149,7 @@ function SolutionSlide({ scene, fps, duration, font, weight }: {
       <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 60px' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 14, marginBottom: 36 }}>
           {words.map((word, i) => {
-            const s = spring({ frame: Math.max(0, frame - i * 5), fps, config: { damping: 10, stiffness: 80 } });
+            const s = spring({ frame: Math.max(0, frame - i * 5), fps, config: SPRING.BOUNCY });
             const isLast = i === words.length - 1;
             return (
               <span key={i} style={{
@@ -164,7 +165,7 @@ function SolutionSlide({ scene, fps, duration, font, weight }: {
         <div style={{ display: 'flex', gap: 20, justifyContent: 'center' }}>
           {subPoints.map((point, i) => {
             const delay = words.length * 5 + 5 + i * 6;
-            const p = spring({ frame: Math.max(0, frame - delay), fps, config: { damping: 12, stiffness: 70 } });
+            const p = spring({ frame: Math.max(0, frame - delay), fps, config: SPRING.BOUNCY });
             return (
               <div key={i} style={{
                 opacity: p, transform: `scale(${interpolate(p, [0, 1], [0.8, 1])})`,
@@ -189,12 +190,13 @@ function PunchlineSlide({ scene, fps, duration, font, weight }: {
   scene: SceneData; fps: number; duration: number; font: string; weight: number;
 }) {
   const frame = useCurrentFrame();
-  const scale = spring({ frame, fps, config: { damping: 6, stiffness: 40, mass: 1.2 } });
+  const scale = spring({ frame, fps, config: SPRING.DRAMATIC });
+  const glowPulse = 0.3 + usePulse(0.1, 0.1);
 
   return (
     <AbsoluteFill>
       <GradientBg color1="#0A0A0A" color2="#0f0520" />
-      <RadialGlow color={scene.accentColor} size={800} opacity={0.3 + Math.sin(frame * 0.1) * 0.1} />
+      <RadialGlow color={scene.accentColor} size={800} opacity={glowPulse} />
       <ExpandingRing color={scene.accentColor} size={250} duration={40} />
       <MorphingShape color={scene.accentColor} size={120} fromShape="star" toShape="circle" x="50%" y="50%" />
 

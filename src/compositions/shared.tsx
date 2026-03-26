@@ -1,8 +1,10 @@
 import React from 'react';
-import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
+import { AbsoluteFill, interpolate, interpolateColors, spring, useCurrentFrame, useVideoConfig } from 'remotion';
 import { makeCircle, makeStar, makeTriangle, makeRect } from '@remotion/shapes';
 import { evolvePath, interpolatePath } from '@remotion/paths';
+import { noise3D } from '@remotion/noise';
 import type { FontStyle } from '../types';
+import { SPRING, STAGGER, usePulse } from '../lib/animation';
 
 // ─── Font helpers ────────────────────────────────────────────────
 export function getFontFamily(style: FontStyle): string {
@@ -23,14 +25,20 @@ export const GradientBg: React.FC<{
   color2: string;
   angle?: number;
   opacity?: number;
-}> = ({ color1, color2, angle = 135, opacity = 1 }) => (
-  <AbsoluteFill
-    style={{
-      background: `linear-gradient(${angle}deg, ${color1}, ${color2})`,
-      opacity,
-    }}
-  />
-);
+  animateAngle?: boolean;
+}> = ({ color1, color2, angle = 135, opacity = 1, animateAngle = false }) => {
+  const frame = useCurrentFrame();
+  const currentAngle = animateAngle ? angle + frame * 0.3 : angle;
+
+  return (
+    <AbsoluteFill
+      style={{
+        background: `linear-gradient(${currentAngle}deg, ${color1}, ${color2})`,
+        opacity,
+      }}
+    />
+  );
+};
 
 // ─── Radial Glow ─────────────────────────────────────────────────
 export const RadialGlow: React.FC<{
@@ -56,7 +64,39 @@ export const RadialGlow: React.FC<{
   />
 );
 
-// ─── Floating Particles ──────────────────────────────────────────
+// ─── Color-Shifting Radial Glow ──────────────────────────────────
+export const ColorShiftGlow: React.FC<{
+  colors: string[];
+  stops?: number[];
+  size?: number;
+  x?: string;
+  y?: string;
+  opacity?: number;
+}> = ({ colors, stops, size = 600, x = '50%', y = '50%', opacity = 0.3 }) => {
+  const frame = useCurrentFrame();
+  const { durationInFrames } = useVideoConfig();
+  const defaultStops = colors.map((_, i) => Math.round((i / (colors.length - 1)) * durationInFrames));
+  const currentColor = interpolateColors(frame, stops || defaultStops, colors);
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        width: size,
+        height: size,
+        left: x,
+        top: y,
+        transform: 'translate(-50%, -50%)',
+        borderRadius: '50%',
+        background: `radial-gradient(circle, ${currentColor} 0%, transparent 70%)`,
+        opacity,
+        pointerEvents: 'none',
+      }}
+    />
+  );
+};
+
+// ─── Floating Particles (noise-driven) ───────────────────────────
 export const Particles: React.FC<{
   count?: number;
   color?: string;
@@ -73,16 +113,17 @@ export const Particles: React.FC<{
       x: rng(i) * 100,
       y: rng(i + 100) * 100,
       size: 2 + rng(i + 200) * 4,
-      speed: 0.2 + rng(i + 300) * 0.5,
-      phase: rng(i + 400) * Math.PI * 2,
+      speed: 0.3 + rng(i + 300) * 0.7,
     }));
   }, [count, seed]);
 
   return (
     <>
       {particles.map((p, i) => {
-        const yOffset = Math.sin(frame * 0.02 * p.speed + p.phase) * 15;
-        const xOffset = Math.cos(frame * 0.015 * p.speed + p.phase) * 10;
+        const xOffset = noise3D(`p-x-${seed}`, p.x, p.y, frame * 0.015 * p.speed) * 20;
+        const yOffset = noise3D(`p-y-${seed}`, p.x, p.y, frame * 0.012 * p.speed) * 25;
+        const opacityNoise = 0.5 + noise3D(`p-o-${seed}`, i, 0, frame * 0.02) * 0.4;
+
         return (
           <div
             key={i}
@@ -95,6 +136,7 @@ export const Particles: React.FC<{
               borderRadius: '50%',
               backgroundColor: color,
               transform: `translate(${xOffset}px, ${yOffset}px)`,
+              opacity: opacityNoise,
               pointerEvents: 'none',
             }}
           />
@@ -218,7 +260,7 @@ export const AnimatedDivider: React.FC<{
 }> = ({ color, width, animateFrom = 'center' }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const progress = spring({ frame, fps, config: { damping: 14, stiffness: 80 } });
+  const progress = spring({ frame, fps, config: SPRING.SMOOTH });
   const currentWidth = interpolate(progress, [0, 1], [0, width]);
 
   return (
@@ -236,7 +278,7 @@ export const AnimatedDivider: React.FC<{
 
 // ─── Icon Placeholder (colored circle with symbol) ───────────────
 export const IconBadge: React.FC<{
-  icon: string; // emoji or single char
+  icon: string;
   color: string;
   size?: number;
 }> = ({ icon, color, size = 48 }) => (
@@ -268,9 +310,8 @@ export const AnimatedNumber: React.FC<{
 }> = ({ value, color, fontSize, fontFamily, fontWeight }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const progress = spring({ frame, fps, config: { damping: 20, stiffness: 40 } });
+  const progress = spring({ frame, fps, config: SPRING.DRAMATIC });
 
-  // If the value is a number, animate it counting up
   const numericMatch = value.match(/^(\d+)(.*)/);
   let displayValue = value;
   if (numericMatch) {
@@ -302,7 +343,6 @@ export const FloatingShapes: React.FC<{
 
   return (
     <>
-      {/* Top-right circle */}
       <div
         style={{
           position: 'absolute',
@@ -316,7 +356,6 @@ export const FloatingShapes: React.FC<{
           pointerEvents: 'none',
         }}
       />
-      {/* Bottom-left circle */}
       <div
         style={{
           position: 'absolute',
@@ -330,7 +369,6 @@ export const FloatingShapes: React.FC<{
           pointerEvents: 'none',
         }}
       />
-      {/* Center diamond */}
       <div
         style={{
           position: 'absolute',
@@ -357,7 +395,7 @@ export const AnimatedCircle: React.FC<{
 }> = ({ radius = 60, color, strokeWidth = 2, x = '50%', y = '50%' }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const progress = spring({ frame, fps, config: { damping: 14, stiffness: 60 } });
+  const progress = spring({ frame, fps, config: SPRING.SMOOTH });
   const { path } = makeCircle({ radius });
   const evolved = evolvePath(progress, path);
 
@@ -390,7 +428,7 @@ export const AnimatedTriangle: React.FC<{
 }> = ({ size = 40, color, direction = 'up', x = '50%', y = '50%' }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const progress = spring({ frame, fps, config: { damping: 12, stiffness: 80 } });
+  const progress = spring({ frame, fps, config: SPRING.BOUNCY });
   const { path } = makeTriangle({ length: size, direction });
   const evolved = evolvePath(progress, path);
   const rotation = interpolate(frame, [0, 120], [0, 360], { extrapolateRight: 'extend' });
@@ -427,7 +465,7 @@ export const AnimatedStar: React.FC<{
 }> = ({ size = 30, color, x = '50%', y = '50%' }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const progress = spring({ frame, fps, config: { damping: 10, stiffness: 60 } });
+  const progress = spring({ frame, fps, config: SPRING.BOUNCY });
   const { path } = makeStar({ innerRadius: size * 0.4, outerRadius: size, points: 5 });
   const evolved = evolvePath(progress, path);
   const rotation = frame * 0.5;
@@ -467,7 +505,7 @@ export const MorphingShape: React.FC<{
 }> = ({ size = 100, color, x = '50%', y = '50%', fromShape = 'circle', toShape = 'star' }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const progress = spring({ frame, fps, config: { damping: 14, stiffness: 40 } });
+  const progress = spring({ frame, fps, config: SPRING.SMOOTH });
 
   const shapeMap = {
     circle: () => makeCircle({ radius: size }).path,
@@ -524,7 +562,7 @@ export const SVGDecorationCluster: React.FC<{
       {items.map((item, i) => {
         const progress = spring({
           frame: Math.max(0, frame - item.delay),
-          fps, config: { damping: 14, stiffness: 60 },
+          fps, config: SPRING.SMOOTH,
         });
         const rotation = frame * (0.2 + i * 0.1);
         const pathData =
@@ -563,7 +601,7 @@ export const SVGDecorationCluster: React.FC<{
 
 // ─── Animated Progress Bar ───────────────────────────────────
 export const AnimatedProgressBar: React.FC<{
-  value: number; // 0-100
+  value: number;
   color: string;
   height?: number;
   width?: number | string;
@@ -574,7 +612,7 @@ export const AnimatedProgressBar: React.FC<{
   const { fps } = useVideoConfig();
   const progress = spring({
     frame: Math.max(0, frame - delay), fps,
-    config: { damping: 20, stiffness: 50 },
+    config: SPRING.SMOOTH,
   });
   const fillWidth = interpolate(progress, [0, 1], [0, value]);
 
@@ -612,8 +650,8 @@ export const AnimatedBarChart: React.FC<{
     <div style={{ display: 'flex', alignItems: 'flex-end', gap, height }}>
       {bars.map((bar, i) => {
         const progress = spring({
-          frame: Math.max(0, frame - 5 - i * 5), fps,
-          config: { damping: 14, stiffness: 60 },
+          frame: Math.max(0, frame - STAGGER.NORMAL - i * STAGGER.NORMAL), fps,
+          config: SPRING.SMOOTH,
         });
         const barHeight = interpolate(progress, [0, 1], [0, (bar.value / maxVal) * height * 0.85]);
         return (
@@ -644,7 +682,7 @@ export const AnimatedDonutRing: React.FC<{
 }> = ({ percentage, color, size = 80, strokeWidth = 6, label }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const progress = spring({ frame, fps, config: { damping: 18, stiffness: 40 } });
+  const progress = spring({ frame, fps, config: SPRING.SMOOTH });
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const fillAmount = interpolate(progress, [0, 1], [circumference, circumference * (1 - percentage / 100)]);
@@ -679,7 +717,7 @@ export const StaggeredReveal: React.FC<{
   children: React.ReactNode[];
   staggerDelay?: number;
   direction?: 'up' | 'down' | 'left' | 'scale';
-}> = ({ children, staggerDelay = 4, direction = 'up' }) => {
+}> = ({ children, staggerDelay = STAGGER.FAST, direction = 'up' }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
@@ -688,7 +726,7 @@ export const StaggeredReveal: React.FC<{
       {React.Children.map(children, (child, i) => {
         const p = spring({
           frame: Math.max(0, frame - i * staggerDelay), fps,
-          config: { damping: 12, stiffness: 80 },
+          config: SPRING.BOUNCY,
         });
         const transform =
           direction === 'up' ? `translateY(${interpolate(p, [0, 1], [25, 0])}px)`
@@ -724,5 +762,429 @@ export const ExpandingRing: React.FC<{
       transform: `translate(-50%, -50%) scale(${scale})`,
       opacity, pointerEvents: 'none',
     }} />
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════
+// NEW LAYOUT COMPONENTS -- replace repetitive card grids
+// ═══════════════════════════════════════════════════════════════
+
+// ─── Spotlight Reveal (one item at a time, centered) ─────────
+export const SpotlightReveal: React.FC<{
+  items: Array<{ icon: string; text: string }>;
+  duration: number;
+  accentColor: string;
+  font: string;
+  weight: number;
+  colors?: string[];
+}> = ({ items, duration, accentColor, font, weight, colors }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const itemCount = items.length;
+  const framesPerItem = Math.floor(duration / itemCount);
+  const activeIndex = Math.min(Math.floor(frame / framesPerItem), itemCount - 1);
+  const localFrame = frame - activeIndex * framesPerItem;
+
+  const itemColors = colors || items.map((_, i) => {
+    const hueShift = (i / itemCount) * 60;
+    return accentColor; // fallback -- compositions can pass distinct colors
+  });
+
+  // Current item color via interpolateColors
+  const colorStops = items.map((_, i) => i * framesPerItem);
+  const currentGlow = itemColors.length >= 2
+    ? interpolateColors(frame, colorStops, itemColors)
+    : accentColor;
+
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      height: '100%', width: '100%', position: 'relative',
+    }}>
+      {items.map((item, i) => {
+        if (i !== activeIndex) return null;
+
+        const enter = spring({ frame: localFrame, fps, config: SPRING.BOUNCY });
+        const iconScale = spring({ frame: localFrame, fps, config: SPRING.DRAMATIC });
+        const textSlide = spring({ frame: Math.max(0, localFrame - 4), fps, config: SPRING.SMOOTH });
+
+        return (
+          <div key={i} style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24,
+            opacity: enter,
+          }}>
+            {item.icon && (
+              <div style={{
+                fontSize: 72,
+                transform: `scale(${interpolate(iconScale, [0, 1], [0.3, 1])})`,
+                filter: `drop-shadow(0 0 20px ${currentGlow}60)`,
+              }}>
+                {item.icon}
+              </div>
+            )}
+            <div style={{
+              fontSize: 32,
+              fontFamily: font,
+              fontWeight: weight,
+              color: '#fff',
+              textAlign: 'center',
+              maxWidth: 700,
+              opacity: textSlide,
+              transform: `translateY(${interpolate(textSlide, [0, 1], [20, 0])}px)`,
+              textShadow: `0 0 20px ${currentGlow}30`,
+            }}>
+              {item.text}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Progress dots */}
+      <div style={{
+        position: 'absolute', bottom: 40,
+        display: 'flex', gap: 12, justifyContent: 'center',
+      }}>
+        {items.map((_, i) => (
+          <div key={i} style={{
+            width: i === activeIndex ? 24 : 8,
+            height: 8,
+            borderRadius: 4,
+            backgroundColor: i === activeIndex ? currentGlow : `${accentColor}40`,
+            transition: 'all 0.3s',
+            boxShadow: i === activeIndex ? `0 0 10px ${currentGlow}80` : 'none',
+          }} />
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ─── Orbit Layout (items around a center) ────────────────────
+export const OrbitLayout: React.FC<{
+  items: Array<{ icon: string; text: string }>;
+  centerLabel: string;
+  accentColor: string;
+  font: string;
+  weight: number;
+  radius?: number;
+}> = ({ items, centerLabel, accentColor, font, weight, radius = 220 }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const globalRotation = frame * 0.15;
+
+  // Center node
+  const centerScale = spring({ frame, fps, config: SPRING.DRAMATIC });
+
+  return (
+    <div style={{
+      position: 'relative', width: '100%', height: '100%',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      {/* Center */}
+      <div style={{
+        position: 'absolute',
+        transform: `scale(${interpolate(centerScale, [0, 1], [0.5, 1])})`,
+        opacity: centerScale,
+        zIndex: 2,
+      }}>
+        <div style={{
+          width: 140, height: 140, borderRadius: '50%',
+          background: `radial-gradient(circle, ${accentColor}25, ${accentColor}08)`,
+          border: `2px solid ${accentColor}60`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: `0 0 30px ${accentColor}30, 0 0 60px ${accentColor}15`,
+        }}>
+          <div style={{
+            fontSize: 16, fontFamily: font, fontWeight: weight,
+            color: '#fff', textAlign: 'center', padding: 12,
+            lineHeight: 1.2,
+          }}>
+            {centerLabel}
+          </div>
+        </div>
+      </div>
+
+      {/* Orbiting items */}
+      {items.map((item, i) => {
+        const angle = (i / items.length) * Math.PI * 2 + (globalRotation * Math.PI / 180);
+        const nodeDelay = STAGGER.SLOW + i * STAGGER.NORMAL;
+        const nodeEnter = spring({ frame: Math.max(0, frame - nodeDelay), fps, config: SPRING.BOUNCY });
+
+        const noiseX = noise3D('orbit-x', i, 0, frame * 0.01) * 5;
+        const noiseY = noise3D('orbit-y', 0, i, frame * 0.01) * 5;
+
+        const x = Math.cos(angle) * radius + noiseX;
+        const y = Math.sin(angle) * radius * 0.6 + noiseY; // elliptical
+
+        // Connector line
+        const lineProgress = spring({ frame: Math.max(0, frame - nodeDelay + 3), fps, config: SPRING.SMOOTH });
+
+        return (
+          <React.Fragment key={i}>
+            {/* Connector line */}
+            <svg style={{
+              position: 'absolute', top: '50%', left: '50%',
+              width: 1, height: 1, overflow: 'visible', pointerEvents: 'none', zIndex: 1,
+            }}>
+              <line
+                x1={0} y1={0} x2={x * lineProgress} y2={y * lineProgress}
+                stroke={`${accentColor}30`}
+                strokeWidth={1}
+                strokeDasharray="4 4"
+              />
+            </svg>
+
+            {/* Node */}
+            <div style={{
+              position: 'absolute',
+              top: '50%', left: '50%',
+              transform: `translate(calc(-50% + ${x}px), calc(-50% + ${y}px)) scale(${interpolate(nodeEnter, [0, 1], [0, 1])})`,
+              opacity: nodeEnter,
+              zIndex: 3,
+            }}>
+              <div style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+              }}>
+                <div style={{
+                  width: 56, height: 56, borderRadius: '50%',
+                  background: `linear-gradient(135deg, ${accentColor}20, ${accentColor}08)`,
+                  border: `1.5px solid ${accentColor}50`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 24,
+                  boxShadow: `0 0 15px ${accentColor}25`,
+                }}>
+                  {item.icon}
+                </div>
+                <div style={{
+                  fontSize: 12, fontFamily: font, fontWeight: 600,
+                  color: '#ccc', textAlign: 'center', maxWidth: 100,
+                  lineHeight: 1.2,
+                }}>
+                  {item.text}
+                </div>
+              </div>
+            </div>
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+};
+
+// ─── Data Viz Row (horizontal bars with shimmer) ─────────────
+export const DataVizRow: React.FC<{
+  items: Array<{ icon: string; text: string }>;
+  accentColor: string;
+  font: string;
+  weight: number;
+}> = ({ items, accentColor, font, weight }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+
+  const barColors = [accentColor, '#84cc16', '#06b6d4', '#f59e0b'];
+
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', gap: 16,
+      width: '100%', padding: '0 40px',
+    }}>
+      {items.map((item, i) => {
+        const delay = STAGGER.SLOW + i * STAGGER.SLOW;
+        const enter = spring({ frame: Math.max(0, frame - delay), fps, config: SPRING.SMOOTH });
+        const barFill = spring({ frame: Math.max(0, frame - delay - 5), fps, config: SPRING.SMOOTH });
+        const shimmer = noise3D('bar-shimmer', i, 0, frame * 0.03) * 0.15;
+        const color = barColors[i % barColors.length];
+
+        // Extract numeric value from text for bar width
+        const numMatch = item.text.match(/(\d+)/);
+        const barPercent = numMatch ? Math.min(parseInt(numMatch[1]), 100) : 70 + i * 8;
+
+        return (
+          <div key={i} style={{
+            display: 'flex', alignItems: 'center', gap: 16,
+            opacity: enter,
+            transform: `translateX(${interpolate(enter, [0, 1], [-30, 0])}px)`,
+          }}>
+            {item.icon && (
+              <div style={{ fontSize: 28, minWidth: 36, textAlign: 'center' }}>
+                {item.icon}
+              </div>
+            )}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{
+                fontSize: 15, fontFamily: font, fontWeight: weight,
+                color: '#fff',
+              }}>
+                {item.text}
+              </div>
+              <div style={{
+                height: 8, borderRadius: 4, background: '#1a1a2a',
+                overflow: 'hidden', border: '1px solid #2a2a3a',
+              }}>
+                <div style={{
+                  width: `${barPercent * barFill}%`,
+                  height: '100%',
+                  borderRadius: 4,
+                  background: `linear-gradient(90deg, ${color}dd, ${color})`,
+                  boxShadow: `0 0 10px ${color}50`,
+                  opacity: 0.85 + shimmer,
+                }} />
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+// ─── Wave Reveal (items enter with curved motion) ────────────
+export const WaveReveal: React.FC<{
+  items: Array<{ icon: string; text: string }>;
+  accentColor: string;
+  font: string;
+  weight: number;
+  lineColor?: string;
+}> = ({ items, accentColor, font, weight, lineColor }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const effectiveLineColor = lineColor || accentColor;
+
+  // Vertical connector line
+  const lineProgress = spring({ frame: Math.max(0, frame - 5), fps, config: SPRING.SMOOTH });
+  const totalHeight = items.length * 80;
+
+  const itemColors = [accentColor, '#84cc16', '#06b6d4', '#f59e0b', '#ef4444', '#8b5cf6'];
+
+  return (
+    <div style={{
+      display: 'flex', position: 'relative',
+      padding: '20px 60px',
+      width: '100%', height: '100%',
+      alignItems: 'center',
+    }}>
+      {/* Vertical connecting line */}
+      <div style={{
+        position: 'absolute',
+        left: 88,
+        top: '50%',
+        transform: 'translateY(-50%)',
+        width: 2,
+        height: totalHeight * lineProgress,
+        background: `linear-gradient(180deg, transparent, ${effectiveLineColor}40, transparent)`,
+        borderRadius: 1,
+      }} />
+
+      <div style={{
+        display: 'flex', flexDirection: 'column', gap: 20,
+        width: '100%',
+      }}>
+        {items.map((item, i) => {
+          const delay = STAGGER.SLOW + i * STAGGER.SLOW;
+          const enter = spring({ frame: Math.max(0, frame - delay), fps, config: SPRING.BOUNCY });
+          const noiseY = noise3D('wave-y', i, 0, frame * 0.02) * 6;
+          const color = itemColors[i % itemColors.length];
+
+          return (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'center', gap: 20,
+              opacity: enter,
+              transform: `translateX(${interpolate(enter, [0, 1], [-50, 0])}px) translateY(${noiseY}px)`,
+            }}>
+              {/* Dot on the line */}
+              <div style={{
+                width: 12, height: 12, borderRadius: '50%',
+                background: color,
+                boxShadow: `0 0 10px ${color}60`,
+                flexShrink: 0,
+                border: '2px solid #0A0A0A',
+              }} />
+
+              {item.icon && (
+                <div style={{
+                  fontSize: 32, minWidth: 44,
+                  filter: `drop-shadow(0 0 8px ${color}40)`,
+                }}>
+                  {item.icon}
+                </div>
+              )}
+
+              <div style={{
+                fontSize: 18, fontFamily: font, fontWeight: weight,
+                color: '#fff',
+                textShadow: `0 0 15px ${color}20`,
+              }}>
+                {item.text}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// ─── Timeline Layout (vertical with drawn connectors) ────────
+export const TimelineLayout: React.FC<{
+  items: Array<{ icon: string; text: string }>;
+  accentColor: string;
+  font: string;
+  weight: number;
+}> = ({ items, accentColor, font, weight }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+
+  // Line draw-in
+  const lineEnter = spring({ frame: Math.max(0, frame - 3), fps, config: SPRING.SMOOTH });
+
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', gap: 0,
+      padding: '20px 80px', height: '100%', justifyContent: 'center',
+      position: 'relative',
+    }}>
+      {/* Vertical line */}
+      <div style={{
+        position: 'absolute', left: 104, top: '15%',
+        width: 2, height: `${70 * lineEnter}%`,
+        background: `linear-gradient(180deg, ${accentColor}60, ${accentColor}20, transparent)`,
+      }} />
+
+      {items.map((item, i) => {
+        const delay = STAGGER.DRAMATIC + i * STAGGER.SLOW;
+        const enter = spring({ frame: Math.max(0, frame - delay), fps, config: SPRING.BOUNCY });
+        const highlightColor = interpolateColors(
+          Math.max(0, frame - delay),
+          [0, 15, 30],
+          [`${accentColor}00`, accentColor, `${accentColor}80`],
+        );
+
+        return (
+          <div key={i} style={{
+            display: 'flex', alignItems: 'center', gap: 20,
+            padding: '14px 0',
+            opacity: enter,
+            transform: `translateX(${interpolate(enter, [0, 1], [-20, 0])}px)`,
+          }}>
+            {/* Node circle */}
+            <div style={{
+              width: 14, height: 14, borderRadius: '50%',
+              background: highlightColor,
+              boxShadow: `0 0 12px ${accentColor}40`,
+              flexShrink: 0,
+              border: '2px solid #0A0A0A',
+            }} />
+
+            <div style={{
+              fontSize: 17, fontFamily: font, fontWeight: 600,
+              color: '#e0e0e0',
+              lineHeight: 1.4,
+            }}>
+              {item.text}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 };
