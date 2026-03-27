@@ -6,15 +6,12 @@ export interface ExportProgress {
   status: string;
 }
 
-const FRAME_CAPTURE_TIMEOUT = 3000; // 3s max per frame
-const GLOBAL_EXPORT_TIMEOUT = 180_000; // 3 minutes max total
+const FRAME_CAPTURE_TIMEOUT = 4000; // 4s max per frame
+const GLOBAL_EXPORT_TIMEOUT = 300_000; // 5 minutes max
 
-/**
- * Wrap a promise with a timeout. Rejects if the promise doesn't resolve in time.
- */
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`Timeout: ${label} took longer than ${ms}ms`)), ms);
+    const timer = setTimeout(() => reject(new Error(`Timeout: ${label}`)), ms);
     promise.then(
       (val) => { clearTimeout(timer); resolve(val); },
       (err) => { clearTimeout(timer); reject(err); },
@@ -23,9 +20,11 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 }
 
 /**
- * Export the Remotion player as a video by stepping through each frame,
- * capturing the DOM with html-to-image, and recording via MediaRecorder.
- * After recording, converts WebM to MP4 using @remotion/webcodecs if available.
+ * Export the Remotion player as video.
+ *
+ * Strategy: capture every Nth frame at reduced resolution, then
+ * use MediaRecorder timing to produce smooth playback. After
+ * recording finishes, convert WebM → MP4 via @remotion/webcodecs.
  */
 export async function exportVideo(
   playerRef: React.RefObject<PlayerRef | null>,
@@ -38,27 +37,29 @@ export async function exportVideo(
   const container = containerRef.current;
   if (!player || !container) throw new Error('Player not found');
 
-  // Global timeout abort
-  const abortController = new AbortController();
-  const globalTimer = setTimeout(() => abortController.abort(), GLOBAL_EXPORT_TIMEOUT);
+  const globalTimer = setTimeout(() => {
+    throw new Error('Export timed out after 5 minutes');
+  }, GLOBAL_EXPORT_TIMEOUT);
 
   try {
-    // Find the actual Remotion rendering container
     const remotionContainer = container.querySelector('[data-remotion-canvas]') as HTMLElement
       || container.querySelector('div[style*="overflow"]') as HTMLElement
       || container;
 
     const rect = remotionContainer.getBoundingClientRect();
-    const width = Math.round(rect.width);
-    const height = Math.round(rect.height);
+    // Use half resolution for fast capture
+    const captureW = Math.round(rect.width * 0.75);
+    const captureH = Math.round(rect.height * 0.75);
 
-    // Create recording canvas (1x pixel ratio for speed and memory)
+    // Recording canvas at capture size
     const recordCanvas = document.createElement('canvas');
-    recordCanvas.width = width;
-    recordCanvas.height = height;
+    recordCanvas.width = captureW;
+    recordCanvas.height = captureH;
     const ctx = recordCanvas.getContext('2d')!;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
 
-    // Setup MediaRecorder
+    // MediaRecorder at the target fps -- it will duplicate frames automatically
     const stream = recordCanvas.captureStream(fps);
     const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
       ? 'video/webm;codecs=vp9'
@@ -68,7 +69,7 @@ export async function exportVideo(
 
     const recorder = new MediaRecorder(stream, {
       mimeType,
-      videoBitsPerSecond: 5_000_000,
+      videoBitsPerSecond: 4_000_000,
     });
 
     const chunks: Blob[] = [];
@@ -76,87 +77,89 @@ export async function exportVideo(
       if (e.data.size > 0) chunks.push(e.data);
     };
 
-    // Pause player, seek to start
     player.pause();
     player.seekTo(0);
-    await waitMs(150);
+    await waitMs(200);
 
-    // Start recording
-    recorder.start();
+    recorder.start(100); // request data every 100ms
 
-    // Step through frames
-    const captureEvery = 2;
+    // Capture every 6th frame = ~5 effective captures per second
+    // For 15s video (450 frames) = 75 captures. At ~200ms each ≈ 15-20 seconds total.
+    const captureEvery = 6;
+    const totalCaptures = Math.ceil(durationInFrames / captureEvery);
     let failedFrames = 0;
 
-    for (let i = 0; i < durationInFrames; i += captureEvery) {
-      if (abortController.signal.aborted) throw new Error('Export timed out');
+    const filterFn = (node: HTMLElement) => {
+      const tag = node.tagName?.toLowerCase();
+      if (tag === 'button' || node.getAttribute?.('data-remotion-controls') !== null) {
+        return false;
+      }
+      return true;
+    };
 
+    for (let i = 0; i < durationInFrames; i += captureEvery) {
       player.seekTo(i);
-      await waitMs(60);
+      await waitMs(40); // brief wait for DOM render
 
       try {
-        const capturedCanvas = await withTimeout(
+        const captured = await withTimeout(
           toCanvas(remotionContainer, {
-            width,
-            height,
+            width: captureW,
+            height: captureH,
             pixelRatio: 1,
             cacheBust: true,
-            skipFonts: false,
-            filter: (node: HTMLElement) => {
-              const tag = node.tagName?.toLowerCase();
-              if (tag === 'button' || node.getAttribute?.('data-remotion-controls') !== null) {
-                return false;
-              }
-              return true;
-            },
+            skipFonts: true, // skip font embedding for speed
+            filter: filterFn,
           }),
           FRAME_CAPTURE_TIMEOUT,
           `Frame ${i}`,
         );
 
-        ctx.clearRect(0, 0, recordCanvas.width, recordCanvas.height);
-        ctx.drawImage(capturedCanvas, 0, 0, recordCanvas.width, recordCanvas.height);
+        ctx.clearRect(0, 0, captureW, captureH);
+        ctx.drawImage(captured, 0, 0, captureW, captureH);
       } catch {
         failedFrames++;
-        // Hold previous frame on failure -- don't block
       }
 
-      // Hold this frame for the duration of skipped frames
-      await waitMs(Math.round((captureEvery / fps) * 1000));
+      // Hold frame for the right duration so MediaRecorder records at correct speed
+      // captureEvery frames at fps = captureEvery/fps seconds per capture
+      const holdMs = Math.round((captureEvery / fps) * 1000);
+      await waitMs(holdMs);
 
-      const progress = Math.round(((i + captureEvery) / durationInFrames) * 85);
-      onProgress({ percent: Math.min(progress, 85), status: `Recording frames... (${Math.round((i / durationInFrames) * 100)}%)` });
+      const captureIndex = Math.floor(i / captureEvery);
+      const pct = Math.round((captureIndex / totalCaptures) * 85);
+      onProgress({ percent: Math.min(pct, 85), status: `Recording... ${Math.round((i / durationInFrames) * 100)}%` });
     }
 
-    if (failedFrames > durationInFrames * 0.5) {
-      throw new Error(`Too many frames failed to capture (${failedFrames}). Try refreshing and retrying.`);
-    }
+    onProgress({ percent: 87, status: 'Encoding...' });
 
-    // Finish recording
-    onProgress({ percent: 88, status: 'Encoding video...' });
-
+    // Stop recording
     const webmBlob = await new Promise<Blob>((resolve, reject) => {
-      const stopTimer = setTimeout(() => reject(new Error('MediaRecorder stop timed out')), 10_000);
+      const stopTimer = setTimeout(() => reject(new Error('Encoding timed out')), 15_000);
       recorder.onstop = () => {
         clearTimeout(stopTimer);
-        const blob = new Blob(chunks, { type: mimeType });
-        resolve(blob);
+        resolve(new Blob(chunks, { type: mimeType }));
       };
       recorder.onerror = () => {
         clearTimeout(stopTimer);
-        reject(new Error('Export encoding failed'));
+        reject(new Error('Encoding failed'));
       };
       recorder.stop();
     });
 
-    // Try to convert WebM to MP4 using @remotion/webcodecs
+    // Convert WebM → MP4
     onProgress({ percent: 90, status: 'Converting to MP4...' });
     try {
-      const mp4Blob = await convertWebmToMp4(webmBlob, onProgress);
+      const mp4Blob = await withTimeout(
+        convertWebmToMp4(webmBlob),
+        30_000,
+        'MP4 conversion',
+      );
+      onProgress({ percent: 99, status: 'Done' });
       return mp4Blob;
     } catch {
-      // Fallback: return WebM if MP4 conversion fails
-      onProgress({ percent: 99, status: 'Downloaded as WebM (MP4 conversion unavailable)' });
+      // Fallback: return WebM directly
+      onProgress({ percent: 99, status: 'Done (WebM format)' });
       return webmBlob;
     }
   } finally {
@@ -164,28 +167,16 @@ export async function exportVideo(
   }
 }
 
-/**
- * Convert a WebM blob to MP4 using @remotion/webcodecs.
- * Falls back to returning the original blob if the browser doesn't support WebCodecs.
- */
-async function convertWebmToMp4(
-  webmBlob: Blob,
-  onProgress: (p: ExportProgress) => void,
-): Promise<Blob> {
+async function convertWebmToMp4(webmBlob: Blob): Promise<Blob> {
   const { convertMedia } = await import('@remotion/webcodecs');
-
   const file = new File([webmBlob], 'recording.webm', { type: 'video/webm' });
-
   const result = await convertMedia({
     src: file,
     container: 'mp4',
     videoCodec: 'h264',
     audioCodec: 'aac',
   });
-
-  onProgress({ percent: 98, status: 'Saving MP4...' });
-  const mp4Blob = await result.save();
-  return mp4Blob;
+  return await result.save();
 }
 
 /**
@@ -217,7 +208,7 @@ export async function exportPNGFrames(
   for (let i = 0; i < sceneCount; i++) {
     const targetFrame = Math.floor(framesPerScene * i + framesPerScene * 0.3);
     player.seekTo(targetFrame);
-    await waitMs(200);
+    await waitMs(300);
 
     onProgress({
       percent: Math.round(((i + 1) / sceneCount) * 80),
@@ -241,7 +232,6 @@ export async function exportPNGFrames(
       );
       frames.push(blob);
     } catch {
-      // Fallback: create a labeled placeholder
       const c = document.createElement('canvas');
       c.width = width * 2;
       c.height = height * 2;
